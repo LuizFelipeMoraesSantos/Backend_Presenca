@@ -23,7 +23,7 @@ import br.com.chamada.estudante.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:8080/api/estudantes")
+@CrossOrigin(origins = "http://localhost:3000")
 @RestController
 @RequestMapping("/api/estudantes")
 public class EstudanteController {
@@ -31,7 +31,8 @@ public class EstudanteController {
     private final TagRepository tagRepository;
     private final PresencaRepository presencaRepository;
 
-   @GetMapping("/Estudantes")
+   
+    @GetMapping 
     public ResponseEntity<Iterable<EstudanteModel>> listarEstudantes() {
         return ResponseEntity.ok(this.tagRepository.findAll());
     }
@@ -95,15 +96,13 @@ public class EstudanteController {
 }
 
     @DeleteMapping("/deletar/{id}")
-    public ResponseEntity<?> deletarEstudante(@PathVariable Long id) {
+    public ResponseEntity<?> deletarEstudante(@PathVariable Long id) { 
         if (this.tagRepository.existsById(id)) {
             this.tagRepository.deleteById(id);
-            System.out.println("Estudante deletado com sucesso: " + id);
-            return ResponseEntity.noContent().build(); // Status 204 (Sucesso sem corpo)
+            return ResponseEntity.noContent().build();
         } else {
-            System.out.println("Estudante não encontrado com ID: " + id);
-            return ResponseEntity.notFound().build(); // Status 404
+            return ResponseEntity.notFound().build();
         }
-}
+    }
     
 }
