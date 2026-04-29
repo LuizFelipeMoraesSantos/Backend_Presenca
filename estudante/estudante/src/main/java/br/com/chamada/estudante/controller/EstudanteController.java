@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,16 +23,17 @@ import br.com.chamada.estudante.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "http://localhost:8080/api/estudantes")
 @RestController
+@RequestMapping("/api/estudantes")
 public class EstudanteController {
 
     private final TagRepository tagRepository;
     private final PresencaRepository presencaRepository;
 
-    @GetMapping("/Estudantes")
-    public Iterable<EstudanteModel> listarEstudantes() {
-        return new ResponseEntity<>(this.tagRepository.findAll(), HttpStatus.OK).getBody();
+   @GetMapping("/Estudantes")
+    public ResponseEntity<Iterable<EstudanteModel>> listarEstudantes() {
+        return ResponseEntity.ok(this.tagRepository.findAll());
     }
 
     @PostMapping("/cadastrar")
@@ -61,14 +63,19 @@ public class EstudanteController {
         }).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body("Estudante não encontrado para esta tag."));
     }
 
+   
     @PutMapping("/atualizar")
-    public ResponseEntity<?> atualizarEstudante(Long id, String novoUid) {
+    public ResponseEntity<?> atualizarEstudante(
+            @RequestParam Long id, 
+            @RequestParam String uid, 
+            @RequestParam String nome) { // Adicionado 'nome' para aceitar o que o Front envia
+        
         return this.tagRepository.findById(id).map(estudante -> {
-            estudante.setUid(novoUid);
+            estudante.setUid(uid);
+            estudante.setNome(nome);
             this.tagRepository.save(estudante);
-            System.out.println("Tag RFID atualizada com sucesso: " + novoUid);
-            return ResponseEntity.ok("Atualizado com sucesso"); // Caso sucesso
-        }).orElse(ResponseEntity.notFound().build()); // Caso não encontre (404)
+            return ResponseEntity.ok(estudante); 
+        }).orElse(ResponseEntity.notFound().build());
     }
 
    @PatchMapping("/atualizar-parcial/{id}")
