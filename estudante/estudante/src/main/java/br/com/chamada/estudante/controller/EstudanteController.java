@@ -2,6 +2,7 @@ package br.com.chamada.estudante.controller;
 
 import java.time.LocalDateTime;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -16,20 +17,23 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+
 import br.com.chamada.estudante.model.EstudanteModel;
 import br.com.chamada.estudante.model.PresencaModel;
 import br.com.chamada.estudante.repository.PresencaRepository;
 import br.com.chamada.estudante.repository.TagRepository;
-import lombok.RequiredArgsConstructor;
+import jakarta.transaction.Transactional;
 
-@RequiredArgsConstructor
+
 @CrossOrigin(origins = "http://localhost:3000")
 @RestController
 @RequestMapping("/api/estudantes")
 public class EstudanteController {
 
-    private final TagRepository tagRepository;
-    private final PresencaRepository presencaRepository;
+    @Autowired
+    private TagRepository tagRepository;
+    @Autowired
+    private  PresencaRepository presencaRepository;
 
    
     @GetMapping 
@@ -50,26 +54,40 @@ public class EstudanteController {
         return new ResponseEntity<>(tagRepository.save(novoEstudante), HttpStatus.CREATED);
     }
 
-    @PostMapping("/chamada")
-    public ResponseEntity<?> registrarPresenca(@RequestParam String uid) {
-        // 1. Procura se o UID existe no banco
-        return tagRepository.findByUid(uid).map(estudante -> {
-            // 2. Se existe, cria um registro na tabela de presenças
-            PresencaModel presenca = new PresencaModel();
-            presenca.setEstudante(estudante);
-            presencaRepository.save(presenca);
+    // src/main/java/br/com/chamada/estudante/controller/EstudanteController.java
 
-            System.out.println("Presença confirmada: " + estudante.getNome() + " em " + LocalDateTime.now());
-            return ResponseEntity.ok("Presença registrada para: " + estudante.getNome());
-        }).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body("Estudante não encontrado para esta tag."));
-    }
+@PostMapping("/chamada")
+public ResponseEntity<?> registrarPresenca(@RequestParam String uid) {
+    return tagRepository.findByUid(uid).map(estudante -> {
+        
+        
+        LocalDateTime inicioDia = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime fimDia = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59).withNano(999999999);
 
+       
+        long presencasHoje = presencaRepository.countByEstudanteAndDataPresencaBetween(estudante, inicioDia, fimDia);
+
+        if (presencasHoje > 0) {
+            // Retorna erro 409 (Conflict) se o aluno já passou a tag hoje
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                                 .body("Presença já registrada para hoje: " + estudante.getNome());
+        }
+
+        
+        PresencaModel presenca = new PresencaModel();
+        presenca.setEstudante(estudante);
+        presencaRepository.save(presenca);
+
+        return ResponseEntity.ok("Presença registrada para: " + estudante.getNome());
+        
+    }).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body("Estudante não encontrado."));
+}
    
     @PutMapping("/atualizar")
     public ResponseEntity<?> atualizarEstudante(
             @RequestParam Long id, 
             @RequestParam String uid, 
-            @RequestParam String nome) { // Adicionado 'nome' para aceitar o que o Front envia
+            @RequestParam String nome) { 
         
         return this.tagRepository.findById(id).map(estudante -> {
             estudante.setUid(uid);
@@ -86,7 +104,7 @@ public class EstudanteController {
                 estudante.setUid(novoUid);
                 this.tagRepository.save(estudante);
                 System.out.println("Tag RFID atualizada parcialmente: " + novoUid);
-                return ResponseEntity.ok(estudante); // Retorna o objeto atualizado
+                return ResponseEntity.ok(estudante); 
             }
             return ResponseEntity.badRequest().body("Novo UID não fornecido");
         }).orElseGet(() -> {
@@ -95,14 +113,14 @@ public class EstudanteController {
         });
 }
 
+    @Transactional
     @DeleteMapping("/deletar/{id}")
-    public ResponseEntity<?> deletarEstudante(@PathVariable Long id) { 
+    public ResponseEntity<?> deletarEstudante(@PathVariable Long id) {
         if (this.tagRepository.existsById(id)) {
             this.tagRepository.deleteById(id);
             return ResponseEntity.noContent().build();
-        } else {
-            return ResponseEntity.notFound().build();
         }
+        return ResponseEntity.notFound().build();
     }
     
 }

@@ -13,9 +13,12 @@ public class PresencaModel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne // Muitos registros de presença para um estudante
-    @JoinColumn(name = "estudante_id")
+    // Esta é a ÚNICA associação da classe
+    @ManyToOne 
+    @JoinColumn(name = "estudante_id", nullable = false)
     private EstudanteModel estudante;
 
+    // Este é um campo de dados simples, NÃO use @ManyToOne aqui
+    @Column(name = "data_presenca") 
     private LocalDateTime dataPresenca = LocalDateTime.now();
 }
