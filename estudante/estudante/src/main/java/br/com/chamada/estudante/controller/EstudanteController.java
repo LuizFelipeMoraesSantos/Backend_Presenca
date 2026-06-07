@@ -9,7 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -34,23 +33,44 @@ public class EstudanteController {
     @Autowired
     private PresencaRepository presencaRepository;
 
-    @GetMapping 
-    public ResponseEntity<Iterable<EstudanteModel>> listarEstudantes() {
-        return ResponseEntity.ok(this.tagRepository.findAll());
+    
+    private static String ultimoUidCapturado = "";
+
+    @GetMapping("/ultimo-uid")
+    public ResponseEntity<Map<String, String>> obterUltimoUid() {
+        return ResponseEntity.ok(Map.of("uid", ultimoUidCapturado));
     }
 
-    @PostMapping("/cadastrar")
-    public ResponseEntity<?> cadastrarEstudante(@RequestParam String uid, @RequestParam String nome) {
-        if (tagRepository.findByUid(uid).isPresent()) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body("Tag já cadastrada");
+    @PostMapping("/enviar-uid-temporario")
+    public ResponseEntity<?> salvarUidTemporario(@RequestBody Map<String, String> body) {
+        ultimoUidCapturado = body.get("uid");
+        System.out.println("Digital temporária detectada no sensor: " + ultimoUidCapturado);
+        return ResponseEntity.ok().build();
+    }
+        @GetMapping 
+        public ResponseEntity<Iterable<EstudanteModel>> listarEstudantes() {
+            return ResponseEntity.ok(this.tagRepository.findAll());
         }
 
-        EstudanteModel novoEstudante = new EstudanteModel();
-        novoEstudante.setUid(uid);
-        novoEstudante.setNome(nome);
-        
-        return new ResponseEntity<>(tagRepository.save(novoEstudante), HttpStatus.CREATED);
+    @PostMapping("/cadastrar")
+public ResponseEntity<?> cadastrarEstudante(@RequestBody Map<String, String> body) {
+    String uid = body.get("uid");
+    String nome = body.get("nome");
+
+    if (uid == null || uid.isEmpty() || nome == null || nome.isEmpty()) {
+        return ResponseEntity.badRequest().body("UID ou Nome não fornecidos no corpo do JSON.");
     }
+
+    if (tagRepository.findByUid(uid).isPresent()) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body("Tag já cadastrada");
+    }
+
+    EstudanteModel novoEstudante = new EstudanteModel();
+    novoEstudante.setUid(uid);
+    novoEstudante.setNome(nome);
+    
+    return new ResponseEntity<>(tagRepository.save(novoEstudante), HttpStatus.CREATED);
+}
 
     @PostMapping("/chamada")
     public ResponseEntity<?> registrarPresenca(@RequestParam(required = false) String uid, @RequestBody(required = false) Map<String, String> body) {
