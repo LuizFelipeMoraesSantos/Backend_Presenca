@@ -2,6 +2,7 @@ package br.com.chamada.estudante.controller;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -34,16 +35,13 @@ public class EstudanteController {
     @Autowired
     private PresencaRepository presencaRepository;
 
-    // Armazena o último UID biométrico capturado pelo ESP32 para novos cadastros
     private static String ultimoUidCapturado = "";
 
-    // GET para o Front-end consultar o UID que está aguardando cadastro
     @GetMapping("/ultimo-uid")
     public ResponseEntity<Map<String, String>> obterUltimoUid() {
         return ResponseEntity.ok(Map.of("uid", ultimoUidCapturado));
     }
 
-    // POST chamado pelo ESP32 quando uma digital não cadastrada é lida (Erro 404 no fluxo do Arduino)
     @PostMapping("/enviar-uid-temporario")
     public ResponseEntity<?> salvarUidTemporario(@RequestBody Map<String, String> body) {
         ultimoUidCapturado = body.get("uid");
@@ -51,20 +49,15 @@ public class EstudanteController {
         return ResponseEntity.ok().build();
     }
 
-    // Listar todos os estudantes cadastrados
     @GetMapping 
     public ResponseEntity<Iterable<EstudanteModel>> listarEstudantes() {
         return ResponseEntity.ok(this.tagRepository.findAll());
     }
 
-    // Cadastrar um novo estudante associando o nome ao UID biométrico
     @PostMapping("/cadastrar")
-    public ResponseEntity<?> cadastrarEstudante(@RequestBody Map<String, String> body) {
-        String uid = body.get("uid");
-        String nome = body.get("nome");
-
+    public ResponseEntity<?> cadastrarEstudante(@RequestParam String uid, @RequestParam String nome) {
         if (uid == null || uid.isEmpty() || nome == null || nome.isEmpty()) {
-            return ResponseEntity.badRequest().body("UID ou Nome não fornecidos no corpo do JSON.");
+            return ResponseEntity.badRequest().body("UID ou Nome não fornecidos.");
         }
 
         if (tagRepository.findByUid(uid).isPresent()) {
@@ -78,41 +71,47 @@ public class EstudanteController {
         return new ResponseEntity<>(tagRepository.save(novoEstudante), HttpStatus.CREATED);
     }
 
-    // Endpoint de Chamada/Presença acionado pelo ESP32
+    // REGISTAR CHAMADA: Procura o ID no banco de dados, gera a presença e traz o nome do aluno
     @PostMapping("/chamada")
-    public ResponseEntity<?> registrarPresenca(@RequestParam(required = false) String uid, @RequestBody(required = false) Map<String, String> body) {
-        // Captura o UID biométrico venha ele como parâmetro na URL ou dentro do corpo JSON
-        final String biometriaUid = (uid != null) ? uid : (body != null ? body.get("uid") : null);
-
-        if (biometriaUid == null || biometriaUid.isEmpty()) {
-            return ResponseEntity.badRequest().body("UID biométrico não fornecido.");
+    public ResponseEntity<?> registrarPresenca(@RequestParam String uid) {
+        if (uid == null || uid.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("status", "erro", "message", "UID biométrico não fornecido."));
         }
 
-        return tagRepository.findByUid(biometriaUid).map(estudante -> {
-            // Define o intervalo do dia atual (00:00:00 até 23:59:59)
-            LocalDateTime inicioDia = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
-            LocalDateTime fimDia = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59).withNano(999999999);
+        // 1. Procura o ID no banco de dados (tabela tag) baseado na digital
+        Optional<EstudanteModel> estudanteOptional = tagRepository.findByUid(uid);
 
-            // Verifica se o estudante já registrou presença hoje
-            long presencasHoje = presencaRepository.countByEstudanteAndDataPresencaBetween(estudante, inicioDia, fimDia);
+        if (estudanteOptional.isEmpty()) {
+            // Se a digital lida não corresponder a nenhum registro do sistema
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("status", "erro", "message", "Digital não cadastrada no sistema."));
+        }
 
-            if (presencasHoje > 0) {
-                // Retorna HTTP 409 Conflict se a presença já tiver sido registrada hoje
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("status", "erro", "nome", "Ja Registrado!"));
-            }
+        EstudanteModel estudante = estudanteOptional.get();
 
-            // Cria e salva o registro de presença
-            PresencaModel presenca = new PresencaModel();
-            presenca.setEstudante(estudante);
-            presencaRepository.save(presenca);
+        // Evitar dupla contagem de presença no mesmo dia
+        LocalDateTime inicioDia = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime fimDia = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59).withNano(999999999);
+        long presencasHoje = presencaRepository.countByEstudanteAndDataPresencaBetween(estudante, inicioDia, fimDia);
 
-            // Retorna HTTP 200 OK com o nome do aluno para o display do ESP32
-            return ResponseEntity.ok(Map.of("status", "sucesso", "nome", estudante.getNome()));
-            
-        }).orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("status", "erro", "nome", "Nao Encontrado")));
+        if (presencasHoje > 0) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("status", "erro", "nome", estudante.getNome(), "message", "Já registado hoje."));
+        }
+
+        // 2. Cria e computa a chamada na tabela de presenças vinculando o objeto do aluno
+        PresencaModel presenca = new PresencaModel();
+        presenca.setEstudante(estudante);
+        presenca.setDataPresenca(LocalDateTime.now()); 
+        presencaRepository.save(presenca);
+
+        // 3. Retorna o JSON de sucesso contendo o Nome real do aluno para a interface web
+        return ResponseEntity.ok(Map.of(
+            "status", "sucesso", 
+            "nome", estudante.getNome(),
+            "uid", estudante.getUid()
+        ));
     }
    
-    // Atualizar os dados de identificação do estudante
     @PutMapping("/atualizar")
     public ResponseEntity<?> atualizarEstudante(@RequestParam Long id, @RequestParam String uid, @RequestParam String nome) { 
         return this.tagRepository.findById(id).map(estudante -> {
@@ -123,7 +122,6 @@ public class EstudanteController {
         }).orElse(ResponseEntity.notFound().build());
     }
 
-    // Excluir um estudante do sistema
     @Transactional
     @DeleteMapping("/deletar/{id}")
     public ResponseEntity<?> deletarEstudante(@PathVariable Long id) {
