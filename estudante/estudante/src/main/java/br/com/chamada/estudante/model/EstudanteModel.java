@@ -1,8 +1,6 @@
 package br.com.chamada.estudante.model;
 
-
 import java.time.LocalDateTime;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -14,7 +12,6 @@ import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -31,9 +28,8 @@ public class EstudanteModel {
     @Size(max = 200, message = "O nome do estudante deve ter no máximo 200 caracteres")
     private String nome;
 
-    @NotBlank(message = "O UID da tag RFID é obrigatório")
+    @NotBlank(message = "O UID da tag RFID/Biometria é obrigatório")
     private String uid;
-
 
     @Column(nullable = false)
     private LocalDateTime dataCadastro = LocalDateTime.now();

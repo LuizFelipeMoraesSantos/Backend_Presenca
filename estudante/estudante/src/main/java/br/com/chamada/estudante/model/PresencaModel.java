@@ -1,9 +1,13 @@
 package br.com.chamada.estudante.model;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
+@AllArgsConstructor
+@NoArgsConstructor
 @Data
 @Entity
 @Table(name = "presencas")
@@ -13,12 +17,12 @@ public class PresencaModel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Esta é a ÚNICA associação da classe
+    // Associação com a tabela de estudantes através do ID
     @ManyToOne 
     @JoinColumn(name = "estudante_id", nullable = false)
     private EstudanteModel estudante;
 
-    // Este é um campo de dados simples, NÃO use @ManyToOne aqui
-    @Column(name = "data_presenca") 
+    // Guarda data e hora exata do registro para controle de duplicatas diárias
+    @Column(name = "data_presenca", nullable = false) 
     private LocalDateTime dataPresenca = LocalDateTime.now();
 }
